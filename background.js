@@ -1,5 +1,5 @@
 /**
- * @typedef {"start"|"stop"|"pause"|"resume"|"export"} Command
+ * @typedef {"start"|"stop"|"pause"|"resume"|"export"|"getTabId"} Command
  */
 
 /**
@@ -23,13 +23,21 @@ function sendToContent(tabId, command) {
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.type === "statusUpdate") {
-        tabs[msg.tabId] = {
-            running: msg.running,
-            paused: msg.paused,
-            totalSaved: msg.totalSaved,
-            bufferSize: msg.bufferSize
-        };
+        const tabId = sender.tab?.id;
+        if (tabId != null) {
+            tabs[tabId] = {
+                running: msg.running,
+                paused: msg.paused,
+                totalSaved: msg.totalSaved,
+                bufferSize: msg.bufferSize
+            };
+        }
         sendResponse({ ok: true });
+        return;
+    }
+
+    if (msg.type === "getTabId") {
+        sendResponse({ tabId: sender.tab?.id });
         return;
     }
 
