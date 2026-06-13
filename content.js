@@ -6,6 +6,7 @@
  * @property {number} totalSaved
  * @property {MutationObserver|null} observer
  * @property {HTMLElement|null} overlay
+ * @property {string|null} dbName
  */
 
 const state = {
@@ -14,18 +15,32 @@ const state = {
     buffer: new Set(),
     totalSaved: 0,
     observer: null,
-    overlay: null
+    overlay: null,
+    dbName: null
 };
 
 let db = null;
-const DB_NAME = "PsXDB";
 const STORE_NAME = "imageUrls";
 const BATCH_SIZE = 200;
 
-/** @returns {Promise<IDBDatabase>} */
-function openDB() {
+/**
+ * @returns {Promise<string>}
+ */
+function getDbName() {
+    return new Promise(resolve => {
+        chrome.runtime.sendMessage({ type: "getTabId" }, res => {
+            resolve("pins_tab_" + res.tabId);
+        });
+    });
+}
+
+/**
+ * @returns {Promise<IDBDatabase>}
+ */
+async function openDB() {
+    if (!state.dbName) state.dbName = await getDbName();
     return new Promise((resolve, reject) => {
-        const req = indexedDB.open(DB_NAME, 1);
+        const req = indexedDB.open(state.dbName, 1);
         req.onupgradeneeded = e => {
             const d = e.target.result;
             if (!d.objectStoreNames.contains(STORE_NAME)) {
@@ -48,6 +63,32 @@ async function saveBatch(urls) {
         const store = tx.objectStore(STORE_NAME);
         urls.forEach(url => store.put({ url }));
         tx.oncomplete = resolve;
+    });
+}
+
+/**
+ * @returns {Promise<void>}
+ */
+async function exportAll() {
+    if (!db) db = await openDB();
+    return new Promise(resolve => {
+        const tx = db.transaction(STORE_NAME, "readonly");
+        const store = tx.objectStore(STORE_NAME);
+        const urls = [];
+        store.openCursor().onsuccess = e => {
+            const c = e.target.result;
+            if (c) {
+                urls.push(c.value.url);
+                c.continue();
+            } else {
+                const blob = new Blob([urls.join("\n")], { type: "text/plain" });
+                const a = document.createElement("a");
+                a.href = URL.createObjectURL(blob);
+                a.download = state.dbName + ".txt";
+                a.click();
+                resolve();
+            }
+        };
     });
 }
 
@@ -109,6 +150,7 @@ function createOverlay() {
 function updateOverlay() {
     if (!state.overlay) return;
     state.overlay.innerHTML =
+        `DB: ${state.dbName}<br>` +
         `Running: ${state.running}<br>` +
         `Paused: ${state.paused}<br>` +
         `Saved: ${state.totalSaved}<br>` +
@@ -118,7 +160,6 @@ function updateOverlay() {
 function sendStatus() {
     chrome.runtime.sendMessage({
         type: "statusUpdate",
-        tabId: document.visibilityState === "visible" ? null : null,
         running: state.running,
         paused: state.paused,
         totalSaved: state.totalSaved,
@@ -161,7 +202,9 @@ function resumeScraper() {
     sendStatus();
 }
 
-/** @returns {Promise<void>} */
+/**
+ * @returns {Promise<void>}
+ */
 async function stopScraper() {
     if (!state.running) return;
     state.running = false;
