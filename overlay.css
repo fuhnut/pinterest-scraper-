@@ -1,0 +1,15 @@
+#pinterest-scraper-overlay {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 999999;
+    background: #111;
+    color: #0f0;
+    font-family: monospace;
+    padding: 12px;
+    border: 2px solid #0f0;
+    border-radius: 6px;
+    font-size: 13px;
+    min-width: 160px;
+    line-height: 1.4;
+}
